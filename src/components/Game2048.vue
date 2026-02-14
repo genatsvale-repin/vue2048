@@ -17,7 +17,7 @@
       @touchend="handleTouchEnd"
     >
       <div class="grid-background">
-        <div v-for="n in 16" :key="n" class="grid-cell"></div>
+        <div v-for="n in (GRID_SIZE * GRID_SIZE)" :key="n" class="grid-cell"></div>
       </div>
 
       <div class="tile-container">
@@ -34,7 +34,7 @@
       
       <div v-if="gameOver" class="game-over">
         <p>ИГРА ОКОНЧЕНА</p>
-        <button @click="resetGame">Попробовать еще раз</button>
+        <button @click="resetGame">Попробовать ещё раз</button>
       </div>
     </div>
     
@@ -45,10 +45,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 
-const GRID_SIZE = 4
-const CELL_GAP = 10
+const GRID_SIZE = 6
+const CELL_GAP = 8
+const TOTAL_CELLS = GRID_SIZE * GRID_SIZE
 const tiles = ref([])
 const score = ref(0)
 const gameOver = ref(false)
@@ -57,25 +58,22 @@ const boardRef = ref(null)
 let startX = 0
 let startY = 0
 
-// Инициализация
 const resetGame = () => {
   tiles.value = []
   score.value = 0
   gameOver.value = false
   addRandomTile()
   addRandomTile()
-  // Фокус для клавиатуры
   if (boardRef.value) boardRef.value.focus()
 }
 
 const getTileStyle = (tile) => {
-  // Для адаптивности используем проценты, так как размер поля может меняться
-  // Позиция: (tile.col * 25)%
+  const cell = 100 / GRID_SIZE
   return {
-    left: `calc(${tile.col * 25}% + ${CELL_GAP/2}px)`,
-    top: `calc(${tile.row * 25}% + ${CELL_GAP/2}px)`,
-    width: `calc(25% - ${CELL_GAP}px)`,
-    height: `calc(25% - ${CELL_GAP}px)`
+    left:   `calc(${tile.col * cell}% + ${CELL_GAP / 2}px)`,
+    top:    `calc(${tile.row * cell}% + ${CELL_GAP / 2}px)`,
+    width:  `calc(${cell}% - ${CELL_GAP}px)`,
+    height: `calc(${cell}% - ${CELL_GAP}px)`
   }
 }
 
@@ -100,25 +98,22 @@ const addRandomTile = () => {
   })
 }
 
-// Логика движения
 const move = (direction) => {
   if (gameOver.value) return
 
-  // Очистка флагов
   tiles.value.forEach(t => { t.isNew = false; t.isMerged = false })
 
   let moved = false
   const vectors = {
-    ArrowUp: { x: 0, y: -1 },
-    ArrowDown: { x: 0, y: 1 },
-    ArrowLeft: { x: -1, y: 0 },
-    ArrowRight: { x: 1, y: 0 }
+    ArrowUp:    { x: 0, y: -1 },
+    ArrowDown:  { x: 0, y:  1 },
+    ArrowLeft:  { x: -1, y: 0 },
+    ArrowRight: { x:  1, y: 0 }
   }
   const vector = vectors[direction]
   if (!vector) return
 
-  // Порядок обхода зависит от направления
-  let traversals = { x: [], y: [] }
+  const traversals = { x: [], y: [] }
   for (let i = 0; i < GRID_SIZE; i++) {
     traversals.x.push(i)
     traversals.y.push(i)
@@ -126,17 +121,17 @@ const move = (direction) => {
   if (vector.x === 1) traversals.x.reverse()
   if (vector.y === 1) traversals.y.reverse()
 
-  const cellContent = (r, c) => tiles.value.find(t => t.row === r && t.col === c && !t.mergedToRemove)
+  const cellContent = (r, c) =>
+    tiles.value.find(t => t.row === r && t.col === c && !t.mergedToRemove)
 
   traversals.y.forEach(r => {
     traversals.x.forEach(c => {
       const tile = cellContent(r, c)
       if (tile) {
-        let positions = findFarthestPosition(r, c, vector)
-        let next = cellContent(positions.next.r, positions.next.c)
+        const positions = findFarthestPosition(r, c, vector)
+        const next = cellContent(positions.next.r, positions.next.c)
 
         if (next && next.value === tile.value && !next.isMerged) {
-          // Merge
           const merged = {
             id: Date.now() + Math.random(),
             value: tile.value * 2,
@@ -144,25 +139,17 @@ const move = (direction) => {
             col: next.col,
             isMerged: true
           }
-          // Помечаем старые для удаления
-          tile.mergedToRemove = true 
-          next.mergedToRemove = true // Важно не использовать этот next снова в этом ходу
-          
-          // Двигаем визуально старый тайл в точку слияния
+          tile.mergedToRemove = true
+          next.mergedToRemove = true
           tile.row = next.row
           tile.col = next.col
 
-          // Добавляем новый (но пока не рендерим, чтобы анимация прошла? 
-          // Упростим: реактивность Vue сразу обновит DOM. 
-          // Для красивой анимации нужно хранить старые. Сейчас делаем функционально.)
-          
           tiles.value = tiles.value.filter(t => t !== tile && t !== next)
           tiles.value.push(merged)
-          
+
           score.value += merged.value
           moved = true
         } else {
-          // Move
           if (tile.row !== positions.farthest.r || tile.col !== positions.farthest.c) {
             tile.row = positions.farthest.r
             tile.col = positions.farthest.c
@@ -196,18 +183,19 @@ const findFarthestPosition = (r, c, vector) => {
 }
 
 const movesAvailable = () => {
-  return tiles.value.length < 16 || 
-         tiles.value.some(t => {
-           // Проверка соседей
-           const dirs = [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}]
-           return dirs.some(d => {
-             const neighbor = tiles.value.find(n => n.row === t.row + d.y && n.col === t.col + d.x)
-             return neighbor && neighbor.value === t.value
-           })
-         })
+  if (tiles.value.length < TOTAL_CELLS) return true
+  return tiles.value.some(t => {
+    const dirs = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }]
+    return dirs.some(d => {
+      const neighbor = tiles.value.find(
+        n => n.row === t.row + d.y && n.col === t.col + d.x
+      )
+      return neighbor && neighbor.value === t.value
+    })
+  })
 }
 
-// --- Input Handling ---
+// --- Input ---
 
 const handleKey = (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -216,32 +204,31 @@ const handleKey = (e) => {
 }
 
 const handleTouchStart = (e) => {
-  if (e.touches.length > 1) return // игнорируем мультитач
+  if (e.touches.length > 1) return
   startX = e.touches[0].clientX
   startY = e.touches[0].clientY
-  // e.preventDefault() // Блокируем скролл? Лучше через CSS touch-action
 }
 
 const handleTouchEnd = (e) => {
   if (!startX || !startY) return
-  
+
   const endX = e.changedTouches[0].clientX
   const endY = e.changedTouches[0].clientY
-  
+
   const dx = endX - startX
   const dy = endY - startY
-  
+
   const absDx = Math.abs(dx)
   const absDy = Math.abs(dy)
-  
-  if (Math.max(absDx, absDy) > 30) { // порог реакции
+
+  if (Math.max(absDx, absDy) > 30) {
     if (absDx > absDy) {
       move(dx > 0 ? 'ArrowRight' : 'ArrowLeft')
     } else {
       move(dy > 0 ? 'ArrowDown' : 'ArrowUp')
     }
   }
-  
+
   startX = 0
   startY = 0
 }
@@ -260,7 +247,7 @@ onMounted(() => {
   max-width: 500px;
   margin: 0 auto;
   user-select: none;
-  touch-action: none; /* Важно для мобилок: отключает скролл браузера внутри игры */
+  touch-action: none;
 }
 
 .header {
@@ -297,17 +284,17 @@ onMounted(() => {
   background: #bbada0;
   border-radius: 8px;
   width: 100%;
-  aspect-ratio: 1 / 1; /* Квадрат */
-  padding: 10px;
+  aspect-ratio: 1 / 1;
+  padding: 8px;
   box-sizing: border-box;
   outline: none;
 }
 
 .grid-background {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 8px;
   width: 100%;
   height: 100%;
 }
@@ -315,14 +302,12 @@ onMounted(() => {
 .grid-cell {
   background: rgba(238, 228, 218, 0.35);
   border-radius: 4px;
-  width: 100%;
-  height: 100%;
 }
 
 .tile-container {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  padding: 10px; /* Совпадает с padding .board */
+  padding: 8px;
   pointer-events: none;
 }
 
@@ -335,35 +320,37 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 22px;
   transition: all 0.15s ease-in-out;
   z-index: 10;
 }
 
 /* Цвета плиток */
-.val-2 { background: #eee4da; }
-.val-4 { background: #ede0c8; }
-.val-8 { background: #f2b179; color: #f9f6f2; }
-.val-16 { background: #f59563; color: #f9f6f2; }
-.val-32 { background: #f67c5f; color: #f9f6f2; }
-.val-64 { background: #f65e3b; color: #f9f6f2; }
-.val-128 { background: #edcf72; color: #f9f6f2; font-size: 28px; box-shadow: 0 0 30px 10px rgba(243, 215, 116, 0.23815); }
-.val-256 { background: #edcc61; color: #f9f6f2; font-size: 28px; box-shadow: 0 0 30px 10px rgba(243, 215, 116, 0.31746); }
-.val-512 { background: #edc850; color: #f9f6f2; font-size: 28px; box-shadow: 0 0 30px 10px rgba(243, 215, 116, 0.39683); }
-.val-1024 { background: #edc53f; color: #f9f6f2; font-size: 24px; }
-.val-2048 { background: #edc22e; color: #f9f6f2; font-size: 24px; box-shadow: 0 0 30px 10px rgba(243, 215, 116, 0.55556); }
+.val-2    { background: #eee4da; }
+.val-4    { background: #ede0c8; }
+.val-8    { background: #f2b179; color: #f9f6f2; }
+.val-16   { background: #f59563; color: #f9f6f2; }
+.val-32   { background: #f67c5f; color: #f9f6f2; }
+.val-64   { background: #f65e3b; color: #f9f6f2; }
+.val-128  { background: #edcf72; color: #f9f6f2; font-size: 20px; }
+.val-256  { background: #edcc61; color: #f9f6f2; font-size: 20px; }
+.val-512  { background: #edc850; color: #f9f6f2; font-size: 20px; }
+.val-1024 { background: #edc53f; color: #f9f6f2; font-size: 18px; }
+.val-2048 { background: #edc22e; color: #f9f6f2; font-size: 18px; box-shadow: 0 0 30px 10px rgba(243, 215, 116, 0.55); }
+.val-4096 { background: #3c3a32; color: #f9f6f2; font-size: 16px; }
+.val-8192 { background: #3c3a32; color: #f9f6f2; font-size: 16px; }
 
-.new { animation: appear 0.2s ease; }
+.new    { animation: appear 0.2s ease; }
 .merged { animation: pop 0.2s ease; }
 
 @keyframes appear {
-  0% { opacity: 0; transform: scale(0); }
+  0%   { opacity: 0; transform: scale(0); }
   100% { opacity: 1; transform: scale(1); }
 }
 @keyframes pop {
-  0% { transform: scale(0.8); }
+  0%  { transform: scale(0.8); }
   50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
+  100%{ transform: scale(1); }
 }
 
 .game-over {
@@ -375,7 +362,7 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   z-index: 100;
-  font-size: 30px;
+  font-size: 28px;
   font-weight: bold;
   color: #776e65;
   border-radius: 8px;
@@ -397,11 +384,10 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* Адаптация под маленькие экраны */
 @media (max-width: 420px) {
   .header { padding: 0 5px 15px; }
-  .tile { font-size: 24px; }
-  .val-128, .val-256, .val-512 { font-size: 20px; }
-  .val-1024, .val-2048 { font-size: 18px; }
+  .tile { font-size: 18px; }
+  .val-128, .val-256, .val-512 { font-size: 16px; }
+  .val-1024, .val-2048, .val-4096, .val-8192 { font-size: 14px; }
 }
 </style>
