@@ -326,7 +326,7 @@ onMounted(() => {
 }
 
 /* Цвета плиток */
-.val-2    { background: #eee4da; }
+.val-2    { background: #4287f5; color: #f9f6f2; }
 .val-4    { background: #ede0c8; }
 .val-8    { background: #f2b179; color: #f9f6f2; }
 .val-16   { background: #f59563; color: #f9f6f2; }
